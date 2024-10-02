@@ -1,0 +1,8 @@
+[package]
+name = "cs201"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+quick-xml = { version = "0.36.2", features = ["serialize"] }
+serde = { version = "1.0.210", features = ["derive"] }
