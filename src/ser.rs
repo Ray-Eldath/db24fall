@@ -1,8 +1,5 @@
-use quick_xml::DeError;
-use crate::de::{ArticleId, ArticleIdList, AuthorList, Date, GrantList, JournalIssue, KeywordList, PublicationType, PubmedArticle, PubmedArticleSet, ReferenceList};
+use crate::de::{ArticleId, AuthorList, Date, GrantList, JournalIssue, KeywordList, PublicationType, PubmedArticle, PubmedArticleSet, ReferenceList};
 use serde::Serialize;
-use serde_path_to_error::Error;
-use crate::de;
 
 #[derive(Serialize, Debug, Clone)]
 #[serde(rename_all(serialize = "snake_case"))]
@@ -33,6 +30,7 @@ struct Article {
     title: String,
     pub_model: String,
     date_created: Date,
+    #[serde(skip_serializing_if = "Option::is_none")]
     date_completed: Option<Date>,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(flatten)]
@@ -59,6 +57,7 @@ impl From<&PubmedArticle> for Article {
         let medline_citation = &value.medline_citation;
         let medline_journal_info = medline_citation.medline_journal_info.clone();
         let article_journal = medline_citation.article.journal.clone();
+        let rf = &pubmed_data.reference_list;
         Article {
             id: medline_citation.id.id,
             title: medline_citation.article.article_title.clone(),
@@ -77,7 +76,13 @@ impl From<&PubmedArticle> for Article {
             date_completed: medline_citation.date_completed.clone(),
             publication_types: medline_citation.article.publication_type_list.publication_type.clone(),
             grants: medline_citation.article.grant_list.clone(),
-            references: process_references(&pubmed_data.reference_list),
+            references: process_references(
+                &(if rf.is_empty() {
+                    None
+                } else {
+                    Some(rf[0].clone())
+                }
+                )),
             article_ids: pubmed_data.article_id_list.article_id.clone(),
         }
     }
@@ -130,7 +135,7 @@ mod tests {
     #[test]
     fn de_ser_test() {
         // let filepath = "test";
-        let filepath = "pubmed24n1212";
+        let filepath = r"pubmed24n1212";
         let content = fs::read_to_string(format!("{}.xml", filepath)).unwrap();
         let deser = run_de_ser(&content);
         println!("{}: {}", filepath, deser.len());
