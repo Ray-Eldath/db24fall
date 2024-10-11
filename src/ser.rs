@@ -1,5 +1,10 @@
-use crate::de::{ArticleId, AuthorList, Date, GrantList, JournalIssue, KeywordList, PublicationType, PubmedArticle, PubmedArticleSet, ReferenceList};
+use crate::de::{
+    ArticleId, AuthorList, Date, GrantList, JournalIssue, Keyword, KeywordList, PublicationType,
+    PubmedArticle, PubmedArticleSet, ReferenceList,
+};
+use crate::stats::STATS;
 use serde::Serialize;
+use std::sync::atomic::Ordering;
 
 #[derive(Serialize, Debug, Clone)]
 #[serde(rename_all(serialize = "snake_case"))]
@@ -32,9 +37,8 @@ struct Article {
     date_created: Date,
     #[serde(skip_serializing_if = "Option::is_none")]
     date_completed: Option<Date>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde(flatten)]
-    keywords: Option<KeywordList>,
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    keywords: Vec<Keyword>,
     journal: Journal,
     #[serde(skip_serializing_if = "Option::is_none")]
     #[serde(flatten)]
@@ -62,7 +66,11 @@ impl From<&PubmedArticle> for Article {
             id: medline_citation.id.id,
             title: medline_citation.article.article_title.clone(),
             pub_model: medline_citation.article.pub_model.clone(),
-            keywords: medline_citation.keyword_list.clone(),
+            keywords: medline_citation
+                .keyword_list
+                .iter()
+                .flat_map(|lst| lst.keyword.clone())
+                .collect(),
             journal: Journal {
                 id: medline_journal_info.id,
                 country: medline_journal_info.country,
@@ -74,29 +82,26 @@ impl From<&PubmedArticle> for Article {
             authors: medline_citation.article.author_list.clone(),
             date_created: medline_citation.date_revised.clone(),
             date_completed: medline_citation.date_completed.clone(),
-            publication_types: medline_citation.article.publication_type_list.publication_type.clone(),
+            publication_types: medline_citation
+                .article
+                .publication_type_list
+                .publication_type
+                .clone(),
             grants: medline_citation.article.grant_list.clone(),
             references: process_references(
+                medline_citation.id.id,
                 &(if rf.is_empty() {
                     None
                 } else {
                     Some(rf[0].clone())
-                }
-                )),
+                }),
+            ),
             article_ids: pubmed_data.article_id_list.article_id.clone(),
         }
     }
 }
 
-fn process_references(input: &Option<ReferenceList>) -> Vec<String> {
-    // pubmed_data.reference_list.clone()
-    //     .map_or(vec![],
-    //             |e| e.reference.iter().map(
-    //                 |x| Reference {
-    //                     cite: x.citation.clone(),
-    //                     refs: x.article_id_list.clone().map_or(vec![], |e| e.article_id),
-    //                 }
-    //             ).collect()),
+fn process_references(self_id: u64, input: &Option<ReferenceList>) -> Vec<String> {
     match input {
         Some(input) => {
             let mut res: Vec<String> = vec![];
@@ -104,10 +109,13 @@ fn process_references(input: &Option<ReferenceList>) -> Vec<String> {
                 match &r.article_id_list {
                     None => continue,
                     Some(article_ids) => {
-                        let mut p: Vec<String> =
-                            article_ids.article_id.iter()
-                                .filter(|e| e.ty == "pubmed")
-                                .map(|e| e.id.clone()).collect();
+                        let vec = &article_ids.article_id;
+                        STATS.refs_before_filtering.fetch_add(vec.len(), Ordering::SeqCst);
+                        let mut p: Vec<String> = vec.iter()
+                            .filter(|e| e.ty == "pubmed" && e.id.is_some())
+                            .map(|e| e.id.clone().unwrap())
+                            .filter(|e| e.parse::<u64>().unwrap() <= 3024180).collect();
+                        STATS.refs_after_filtering.fetch_add(p.len(), Ordering::SeqCst);
                         res.append(&mut p);
                     }
                 }
@@ -118,34 +126,11 @@ fn process_references(input: &Option<ReferenceList>) -> Vec<String> {
     }
 }
 
-fn run_de_ser(content: &str) -> Vec<String> {
+pub(crate) fn run_de_ser(content: &str) -> Vec<String> {
     let xd = &mut quick_xml::de::Deserializer::from_str(content);
     let res: Result<PubmedArticleSet, _> = serde_path_to_error::deserialize(xd);
     res.unwrap().pubmed_article.iter()
         .map(|e| Article::from(e))
         .map(|e| serde_json::ser::to_string(&e).unwrap())
         .collect()
-}
-
-mod tests {
-    use crate::ser::run_de_ser;
-    use std::fs;
-    use std::io::{LineWriter, Write};
-
-    #[test]
-    fn de_ser_test() {
-        // let filepath = "test";
-        let filepath = r"pubmed24n1212";
-        let content = fs::read_to_string(format!("{}.xml", filepath)).unwrap();
-        let deser = run_de_ser(&content);
-        println!("{}: {}", filepath, deser.len());
-        // deser.iter().take(3).for_each(|e| println!("{}", e));
-        let file = fs::File::create(format!("{}.ndjson", filepath)).unwrap();
-        let mut file = LineWriter::new(file);
-        for (i, str) in deser.iter().enumerate() {
-            print!("{} ", i);
-            file.write_all(str.as_bytes()).unwrap();
-            file.write_all(b"\n").unwrap();
-        }
-    }
 }

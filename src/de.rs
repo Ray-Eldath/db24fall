@@ -68,7 +68,8 @@ pub(crate) struct MedlineCitation {
     pub(crate) date_completed: Option<Date>,
     pub(crate) article: Article,
     pub(crate) medline_journal_info: MedlineJournalInfo,
-    pub(crate) keyword_list: Option<KeywordList>,
+    #[serde(default)]
+    pub(crate) keyword_list: Vec<KeywordList>,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
@@ -183,13 +184,15 @@ where
     }
 
     fn traverse_ibs_wrapper(ibs: &ItalicBoldStringWrapper) -> String {
-        ibs.field.iter().map(|e|
-            match &e {
+        ibs.field
+            .iter()
+            .map(|e| match &e {
                 ItalicBoldString::I(str) => str.clone(),
                 ItalicBoldString::B(str) => format!("{:?}", str),
                 ItalicBoldString::String(str) => str.clone(),
                 _ => "".to_string(),
-            }).collect()
+            })
+            .collect()
     }
 
     // Ok(SegmentedString::deserialize(deserializer)?.field.join(" "))
@@ -291,7 +294,7 @@ pub(crate) struct ArticleId {
     #[serde(rename(deserialize = "@IdType"))]
     pub(crate) ty: String,
     #[serde(rename(deserialize = "$value"))]
-    pub(crate) id: String,
+    pub(crate) id: Option<String>,
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
