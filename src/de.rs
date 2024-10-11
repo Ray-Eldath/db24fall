@@ -75,18 +75,11 @@ pub(crate) struct MedlineCitation {
 #[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all(deserialize = "PascalCase", serialize = "snake_case"))]
 pub(crate) struct MedlineJournalInfo {
-    #[serde(
-        deserialize_with = "unwrap_string",
-        rename(deserialize = "NlmUniqueID")
-    )]
+    #[serde(deserialize_with = "unwrap_string", rename(deserialize = "NlmUniqueID"))]
     pub(crate) id: String,
     #[serde(deserialize_with = "unwrap_string")]
     pub(crate) country: String,
-    #[serde(
-        deserialize_with = "unwrap_string",
-        rename(deserialize = "ISSNLinking"),
-        default
-    )]
+    #[serde(deserialize_with = "unwrap_string", rename(deserialize = "ISSNLinking"), default)]
     pub(crate) issn: String,
 }
 
@@ -138,19 +131,9 @@ fn join_segmented_string<'de, D>(deserializer: D) -> Result<String, D::Error>
 where
     D: Deserializer<'de>,
 {
-    #[derive(Deserialize, Debug)]
-    #[serde(rename_all(deserialize = "snake_case"))]
-    enum TextOrOther {
-        Text(String),
-        B(String),
-        Other,
-    }
-    #[derive(Deserialize, Debug)]
-    struct TextOrOtherWrapper {
-        #[serde(rename(deserialize = "$value"), default)]
-        field: Vec<ItalicBoldString>,
-    }
-
+    // this is SO STUPID. but I really couldn't find a way out
+    // https://github.com/tafia/quick-xml/issues/257#issuecomment-2402816555
+    // basically being toyed by Rust ecosystem, YET AGAIN
     #[derive(Deserialize, Debug)]
     #[serde(rename_all(deserialize = "snake_case"))]
     enum ItalicBoldString {
@@ -184,21 +167,16 @@ where
     }
 
     fn traverse_ibs_wrapper(ibs: &ItalicBoldStringWrapper) -> String {
-        ibs.field
-            .iter()
+        ibs.field.iter()
             .map(|e| match &e {
                 ItalicBoldString::I(str) => str.clone(),
                 ItalicBoldString::B(str) => format!("{:?}", str),
                 ItalicBoldString::String(str) => str.clone(),
                 _ => "".to_string(),
-            })
-            .collect()
+            }).collect()
     }
 
-    // Ok(SegmentedString::deserialize(deserializer)?.field.join(" "))
-    Ok(SegmentedString::deserialize(deserializer)?
-        .field
-        .iter()
+    Ok(SegmentedString::deserialize(deserializer)?.field.iter()
         .map(|e| match e {
             CouldBeString::I(str) => traverse_ibs_wrapper(&str),
             CouldBeString::B(str) => traverse_ibs_wrapper(&str),
@@ -208,8 +186,7 @@ where
             &CouldBeString::Math => "".to_string(),
         })
         .map(|e| e.trim().to_string())
-        .collect::<Vec<_>>()
-        .join(" "))
+        .collect::<Vec<_>>().join(" "))
 }
 
 mod tests {
@@ -225,15 +202,7 @@ mod tests {
         </article>
         ";
         #[derive(Deserialize, Debug)]
-        struct ABA {
-            #[serde(deserialize_with = "join_segmented_string")]
-            title: String,
-        }
-        #[derive(Deserialize, Debug)]
         struct AnyName {
-            // Does not (yet?) supported by the serde
-            // https://github.com/serde-rs/serde/issues/1905
-            // #[serde(flatten)]
             #[serde(deserialize_with = "join_segmented_string")]
             title: String,
         }
@@ -269,7 +238,7 @@ pub(crate) struct GrantList {
 pub(crate) struct Keyword {
     #[serde(deserialize_with = "join_segmented_string")]
     pub(crate) name: String,
-    // TODO: is major?
+    // TODO: save is major?
     // #[serde(rename(deserialize = "@MajorTopicYN"), deserialize_with = "unwrap_yn")]
     // pub(crate) is_major: bool,
 }
@@ -381,22 +350,15 @@ where
                         last_name: de.last_name.clone(),
                         fore_name: de.fore_name.clone(),
                         initials: de.initials.clone(),
-                        affiliation: de
-                            .affiliation_info
-                            .iter()
-                            .map(|de| de.affiliation.clone())
-                            .collect(),
+                        affiliation: de.affiliation_info.iter().map(|de| de.affiliation.clone()).collect(),
                     })
                 } else {
                     Ok(Collective {
-                        collective_name: de.collective_name.clone(),
+                        collective_name: de.collective_name.clone()
                     })
                 }
             } else {
-                Err(Error::custom(format!(
-                    "person_empty={} collective_empty={}",
-                    person_empty, collective_empty
-                )))
+                Err(Error::custom(format!("person_empty={} collective_empty={}", person_empty, collective_empty)))
             }
         })
         .collect()
@@ -411,10 +373,7 @@ where
 
 #[derive(Deserialize, Serialize, Debug, Clone)]
 pub(crate) struct AuthorList {
-    #[serde(
-        rename(deserialize = "Author"),
-        deserialize_with = "de_vec_enum_author"
-    )]
+    #[serde(rename(deserialize = "Author"), deserialize_with = "de_vec_enum_author")]
     pub(crate) author: Vec<EnumAuthor>,
 }
 

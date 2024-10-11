@@ -1,5 +1,5 @@
 use crate::de::{
-    ArticleId, AuthorList, Date, GrantList, JournalIssue, Keyword, KeywordList, PublicationType,
+    ArticleId, AuthorList, Date, GrantList, JournalIssue, Keyword, PublicationType,
     PubmedArticle, PubmedArticleSet, ReferenceList,
 };
 use crate::stats::STATS;
@@ -18,14 +18,6 @@ struct Journal {
     // iso_abbreviation: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     journal_issue: Option<JournalIssue>,
-}
-
-#[derive(Serialize, Debug, Clone)]
-#[serde(rename_all(serialize = "snake_case"))]
-struct Reference {
-    cite: String,
-    #[serde(skip_serializing_if = "Vec::is_empty")]
-    refs: Vec<ArticleId>,
 }
 
 #[derive(Serialize, Debug, Clone)]
@@ -50,7 +42,6 @@ struct Article {
     grants: Option<GrantList>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     references: Vec<String>,
-    // references: Vec<Reference>,
     #[serde(skip_serializing_if = "Vec::is_empty")]
     article_ids: Vec<ArticleId>,
 }
@@ -114,7 +105,7 @@ fn process_references(self_id: u64, input: &Option<ReferenceList>) -> Vec<String
                         let mut p: Vec<String> = vec.iter()
                             .filter(|e| e.ty == "pubmed" && e.id.is_some())
                             .map(|e| e.id.clone().unwrap())
-                            .filter(|e| e.parse::<u64>().unwrap() <= 3024180).collect();
+                            .filter(|e| e.parse::<u64>().unwrap() <= 3024180).collect(); // the LAST available id at file 0100
                         STATS.refs_after_filtering.fetch_add(p.len(), Ordering::SeqCst);
                         res.append(&mut p);
                     }
